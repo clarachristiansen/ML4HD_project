@@ -1,6 +1,6 @@
 # ignore data
 /data
-
+/debug_viz
 # Ignore .DS_Store
 .DS_Store
 
