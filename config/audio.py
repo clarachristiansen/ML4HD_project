@@ -1,0 +1,6 @@
+# config/audio.py
+SAMPLE_RATE = 16000 # 16 KHz
+FRAME_LENGTH = int(SAMPLE_RATE * 0.025)  # 25 ms
+FRAME_STEP = int(SAMPLE_RATE * 0.010)  # 10 ms
+N_FRAMES = 98
+N_MELS = 40
