@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from .utils_plotting import save_logmel_examples
 from .preprocessing import get_datasets
 
-def build_cnn_trad_fpool3(input_shape=(32, 40, 1), num_classes=12):
+def build_cnn_trad_fpool3(input_shape=(98, 40, 1), num_classes=12):
     """
     Sainath-style cnn-trad-fpool3 for keyword spotting.
 
