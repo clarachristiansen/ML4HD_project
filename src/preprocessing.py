@@ -34,7 +34,8 @@ def get_datasets(sample_rate: int = SAMPLE_RATE, batch_size: int = BATCH_SIZE, r
         noise=True,
         repeat=repeat_train,
         final_data='logmel_spectrogram',
-        num_mel_filters=N_MELS
+        num_mel_filters=N_MELS,
+        train=True
     )
 
     valid_ds = create_tf_dataset(

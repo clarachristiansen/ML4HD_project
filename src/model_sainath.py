@@ -3,7 +3,7 @@ from tensorflow.keras import layers, models
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-
+from .utils_plotting import save_logmel_examples
 from .preprocessing import get_datasets
 
 def build_cnn_trad_fpool3(input_shape=(32, 40, 1), num_classes=12):
@@ -60,73 +60,79 @@ def build_cnn_trad_fpool3(input_shape=(32, 40, 1), num_classes=12):
 
     return model
 
-### OBS SAVE SOMEWHERE ELSE!!
-def save_logmel_examples(ds, classes, out_dir="debug_viz", n=12):
-    os.makedirs(out_dir, exist_ok=True)
+def build_cnn_tpool2(input_shape=(98, 40, 1), num_classes=12):
+    """
+    Sainath & Parada (2015) 'cnn-tpool2' style CNN.
+    Adapted to full-utterance log-mel input: (98 frames, 40 mel bins, 1 channel).
 
-    # Take n individual examples (not batches) for easy naming
-    unbatched = ds.unbatch().take(n)
+    Paper (Table 5):
+      Conv1: m=21, r=8, n=94 ; pool in time p=2 and freq q=3
+      Conv2: m=6,  r=4, n=94 ; no pooling
+      Linear: 32
+    Then (as in your baseline): Dense 128 ReLU -> Softmax
+    """
+    inputs = layers.Input(shape=input_shape)
 
-    for i, (x, y) in enumerate(unbatched):
-        x = x.numpy()  # (T, F, 1)
-        y = int(y.numpy())
+    # Conv1: (21 x 8), 94 feature maps
+    x = layers.Conv2D(
+        filters=94,
+        kernel_size=(21, 8),
+        strides=(1, 1),
+        padding="valid",
+        activation="relu",
+        name="conv1",
+    )(inputs)
 
-        # Remove channel dim -> (T, F)
-        x2 = x[..., 0]
+    # Pool in time by p=2, in freq by q=3 (non-overlapping)
+    x = layers.MaxPool2D(
+        pool_size=(2, 3),
+        strides=(2, 3),
+        padding="valid",
+        name="pool_t2_f3",
+    )(x)
 
-        # Map label to class name if available
-        if isinstance(classes, (list, tuple)) and y < len(classes):
-            cname = str(classes[y])
-        else:
-            cname = f"class{y}"
+    # Conv2: (6 x 4), 94 feature maps
+    x = layers.Conv2D(
+        filters=94,
+        kernel_size=(6, 4),
+        strides=(1, 1),
+        padding="valid",
+        activation="relu",
+        name="conv2",
+    )(x)
 
-        # Plot
-        plt.figure()
-        plt.imshow(x2.T, aspect="auto", origin="lower")  # transpose so y-axis = mel bins
-        plt.title(f"Example {i} | label={y} | {cname}")
-        plt.xlabel("Time frames")
-        plt.ylabel("Mel bins")
+    # Flatten + low-rank linear layer (32)
+    x = layers.Flatten(name="flatten")(x)
+    x = layers.Dense(32, activation=None, name="linear_32")(x)
 
-        # Save image
-        safe_cname = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in cname)
-        png_path = os.path.join(out_dir, f"{i:02d}_label{y}_{safe_cname}.png")
-        plt.tight_layout()
-        plt.savefig(png_path, dpi=150)
-        plt.close()
+    # Nonlinear DNN layer (consistent with your previous implementation)
+    x = layers.Dense(128, activation="relu", name="dnn_128")(x)
 
-        # Save raw array too (optional but useful)
-        npz_path = os.path.join(out_dir, f"{i:02d}_label{y}_{safe_cname}.npz")
-        np.savez_compressed(npz_path, x=x2, y=y, cname=cname)
+    outputs = layers.Dense(num_classes, activation="softmax", name="softmax")(x)
 
-    print(f"Saved {n} examples to: {out_dir}/")
+    model = models.Model(inputs=inputs, outputs=outputs, name="cnn_tpool2")
 
-
+    return model
 
 if __name__ == "__main__":
     train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False)
     
-    #save_logmel_examples(train_ds, classes, out_dir="debug_viz/train", n=12)
-    #save_logmel_examples(val_ds, classes, out_dir="debug_viz/val", n=12)
+    save_logmel_examples(train_ds, classes, out_dir="debug_viz/train", n=12)
+    save_logmel_examples(val_ds, classes, out_dir="debug_viz/val", n=12)
 
-    model = build_cnn_trad_fpool3(num_classes=len(classes))
+    #model = build_cnn_trad_fpool3(num_classes=len(classes))
+    model = build_cnn_tpool2(num_classes=len(classes))
     model.summary()
     
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=["accuracy"],
-    )
-
-    num_train = len(train_ds)   # or however you build the dataframe
-    batch_size = 64  # must match what you used in create_tf_dataset ### OBS GET FROM CONFIG!
-    steps_per_epoch = num_train // batch_size
-    print(steps_per_epoch) 
-    print(num_train)   
+    ) 
 
     history = model.fit(
         train_ds,
         validation_data=val_ds,
         epochs=10,
-        steps_per_epoch=100,
         callbacks=[tf.keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True)],
     )

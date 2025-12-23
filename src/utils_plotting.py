@@ -2,10 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from collections import Counter
-
-
-
-
+import os
 
 def plot_recording_waveform(audio_sample, noisy_audio_sample, sample_rate):
     """
@@ -81,9 +78,6 @@ def plot_spectrogram_and_mfccs(spectrogram, mfccs):
     plt.show()
 
 
-
-
-
 def plot_prediction_distribution(true_labels, pred_labels, classes):
   
     if hasattr(pred_labels, 'numpy'):
@@ -153,3 +147,43 @@ def plot_prediction_distribution(true_labels, pred_labels, classes):
         plt.gca().invert_yaxis()
         plt.tight_layout()
         plt.show()
+
+
+def save_logmel_examples(ds, classes, out_dir="debug_viz", n=12):
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Take n individual examples (not batches) for easy naming
+    unbatched = ds.unbatch().take(n)
+
+    for i, (x, y) in enumerate(unbatched):
+        x = x.numpy()  # (T, F, 1)
+        y = int(y.numpy())
+
+        # Remove channel dim -> (T, F)
+        x2 = x[..., 0]
+
+        # Map label to class name if available
+        if isinstance(classes, (list, tuple)) and y < len(classes):
+            cname = str(classes[y])
+        else:
+            cname = f"class{y}"
+
+        # Plot
+        plt.figure()
+        plt.imshow(x2.T, aspect="auto", origin="lower")  # transpose so y-axis = mel bins
+        plt.title(f"Example {i} | label={y} | {cname}")
+        plt.xlabel("Time frames")
+        plt.ylabel("Mel bins")
+
+        # Save image
+        safe_cname = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in cname)
+        png_path = os.path.join(out_dir, f"{i:02d}_label{y}_{safe_cname}.png")
+        plt.tight_layout()
+        plt.savefig(png_path, dpi=150)
+        plt.close()
+
+        # Save raw array too (optional but useful)
+        npz_path = os.path.join(out_dir, f"{i:02d}_label{y}_{safe_cname}.npz")
+        np.savez_compressed(npz_path, x=x2, y=y, cname=cname)
+
+    print(f"Saved {n} examples to: {out_dir}/")
