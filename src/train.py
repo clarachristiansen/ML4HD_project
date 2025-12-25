@@ -1,7 +1,7 @@
 import argparse
 import tensorflow as tf
 from .preprocessing import get_datasets
-from .model_sainath import build_cnn_trad_fpool3  
+from .model_sainath import build_cnn_trad_fpool3, build_cnn_tpool2
 from .wandb import WandbMetricsCallback  # your custom callback
 
 def parse_args():
@@ -22,6 +22,13 @@ def main():
 
     if args.architecture == "cnn_trad_fpool3":
         model = build_cnn_trad_fpool3(num_classes=len(classes))
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+            metrics=["accuracy"],
+        )
+    if args.architecture == "cnn_tpool2":
+        model = build_cnn_tpool2(num_classes=len(classes))
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
             loss=tf.keras.losses.SparseCategoricalCrossentropy(),
