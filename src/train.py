@@ -1,8 +1,11 @@
 import argparse
+import os
 import tensorflow as tf
+import wandb
 from .preprocessing import get_datasets
 from .model_sainath import build_cnn_trad_fpool3, build_cnn_tpool2
 from .wandb import WandbMetricsCallback  # your custom callback
+
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -10,14 +13,14 @@ def parse_args():
     p.add_argument("--epochs", type=int, default=20)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--use_wandb", action="store_true", help="Enable Weights & Biases logging")
-    p.add_argument("--wandb_project", type=str, default="ML4HD_project")
+    p.add_argument("--wandb_project", type=str, default="ML4HDproject")
     p.add_argument("--wandb_run_name", type=str, default=None)
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-
+    wandb.login(key=os.environ.get("WANDB_API_KEY"))
     train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False)
 
     if args.architecture == "cnn_trad_fpool3":
@@ -27,7 +30,7 @@ def main():
             loss=tf.keras.losses.SparseCategoricalCrossentropy(),
             metrics=["accuracy"],
         )
-    if args.architecture == "cnn_tpool2":
+    elif args.architecture == "cnn_tpool2":
         model = build_cnn_tpool2(num_classes=len(classes))
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
@@ -37,23 +40,39 @@ def main():
     # MAYBE MORE!!!
     else:
         raise ValueError(f"Unknown architecture: {args.architecture}")
+    
+    best_prefix = "results/best.ckpt"  # produces best.ckpt.index + best.ckpt.data-...
 
     callbacks = [
-        tf.keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=best_prefix,
+            monitor="val_loss",
+            mode="min",
+            save_best_only=True,
+            save_weights_only=True,
+            verbose=1,
+        ),
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            mode="min",
+            patience=5,
+            restore_best_weights=True,
+            verbose=1,
+        ),
     ]
 
     # ---- Optional W&B ----
     if args.use_wandb:
-        import wandb
-        from .wandb import WandbMetricsCallback, WandbCheckpointCallback  # your custom callbacks
-
         wandb.init(
+            entity=os.environ.get("WANDB_ENTITY"),
             project=args.wandb_project,
             name=args.wandb_run_name,
+            settings=wandb.Settings(start_method="thread"),
             config={
                 "epochs": args.epochs,
                 "lr": args.lr,
                 "num_classes": len(classes),
+                "job_id": os.environ.get("LSB_JOBID"),
             },
         )
 
@@ -74,9 +93,15 @@ def main():
 
     # ---- Optional W&B finalize ----
     if args.use_wandb:
-        import wandb
+        idx = best_prefix + ".index"
+        dat = best_prefix + ".data-00000-of-00001"
+        try:
+            wandb.save(idx)
+            wandb.save(dat)
+            print('INFO: Best weights files saved locally and to wandb (files tab).')
+        except Exception as e:
+            print("WARN: saving best weights files to wandb failed. Error:", repr(e))
         wandb.finish()
-
 
 if __name__ == "__main__":
     main()

@@ -279,7 +279,7 @@ def mfccs_to_graph_tensors_for_dataset(mfcc, adjacency_matrices, label, reduced_
 
     return graph_tensor
 
-def prepare_mel_for_cnn(mel_spec, wav, label, desired_frames=98, train=False):
+def prepare_mel_for_cnn(mel_spec, wav, label, desired_frames=32, train=False):
     """
     mel_spec: [T, n_mels]
     wav: unused here, just passed through by pipeline
