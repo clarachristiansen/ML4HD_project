@@ -310,7 +310,7 @@ def prepare_mel_for_cnn(mel_spec, wav, label, desired_frames=32, train=False):
 
 
 # Final dataset creation function
-def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob, cache_file = '', batch_size = 16, cache = False, shuffle = False, repeat = False, noise = False, final_data = Literal['logmel_spectrogram','graph_tensor'], num_mel_filters=13, train=False) -> tf.data.Dataset:
+def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob, cache_file = '', batch_size = 16, cache = False, shuffle = False, repeat = False, noise = False, final_data = Literal['logmel_spectrogram','graph_tensor'], num_mel_filters=13, train=False, frames=32) -> tf.data.Dataset:
 
     # obtain file names and numerical labels
     file_names, labels = dataframe["file_path"], tf.cast(dataframe["label"], tf.int32)
@@ -372,18 +372,11 @@ def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob
         dataset = dataset.map(mfccs_to_graph_tensors_for_dataset_lambda, num_parallel_calls = tf.data.AUTOTUNE)
         print('Converted MFCCs to Graph Tensors')
     elif final_data == 'logmel_spectrogram':
-        ds_end = dataset.take(1)
-        x, y, z = next(iter(ds_end))
-        tf.print(x.shape)
         # Compute Log-Mel Spectrograms using the get_log_mel_spectrogram() function
         dataset = dataset.map(
-            lambda mel_spec, wav, label: prepare_mel_for_cnn(mel_spec, wav, label, train=train),
+            lambda mel_spec, wav, label: prepare_mel_for_cnn(mel_spec, wav, label, train=train, desired_frames=frames),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
-        
-        ds_end = dataset.take(1)
-        x, y = next(iter(ds_end))
-        tf.print(x.shape)
 
     if cache:
         dataset = dataset.cache(cache_file)

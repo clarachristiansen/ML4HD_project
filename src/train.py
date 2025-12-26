@@ -13,25 +13,27 @@ def parse_args():
     p.add_argument("--epochs", type=int, default=20)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--use_wandb", action="store_true", help="Enable Weights & Biases logging")
-    p.add_argument("--wandb_project", type=str, default="ML4HDproject")
+    p.add_argument("--wandb_entity", type=str, default="clara-christiansen-danmarks-tekniske-universitet-dtu")
+    p.add_argument("--wandb_project", type=str, default="ML4HD_project")
     p.add_argument("--wandb_run_name", type=str, default=None)
+    p.add_argument("--frames", type=int, default=32)
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-    wandb.login(key=os.environ.get("WANDB_API_KEY"))
-    train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False)
+    print("Training with args:", args.__dict__)
+    train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False, frames=args.frames)
 
     if args.architecture == "cnn_trad_fpool3":
-        model = build_cnn_trad_fpool3(num_classes=len(classes))
+        model = build_cnn_trad_fpool3(input_shape=(args.frames, 40, 1), num_classes=len(classes))
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
             loss=tf.keras.losses.SparseCategoricalCrossentropy(),
             metrics=["accuracy"],
         )
     elif args.architecture == "cnn_tpool2":
-        model = build_cnn_tpool2(num_classes=len(classes))
+        model = build_cnn_tpool2(input_shape=(args.frames, 40, 1), num_classes=len(classes))
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
             loss=tf.keras.losses.SparseCategoricalCrossentropy(),
@@ -41,7 +43,7 @@ def main():
     else:
         raise ValueError(f"Unknown architecture: {args.architecture}")
     
-    best_prefix = "results/best.ckpt"  # produces best.ckpt.index + best.ckpt.data-...
+    best_prefix = "results/best.ckpt"  
 
     callbacks = [
         tf.keras.callbacks.ModelCheckpoint(
@@ -61,27 +63,18 @@ def main():
         ),
     ]
 
-    # ---- Optional W&B ----
     if args.use_wandb:
+        wandb.login(key=os.environ.get("WANDB_API_KEY"))
         wandb.init(
-            entity=os.environ.get("WANDB_ENTITY"),
+            entity=args.wandb_entity,
             project=args.wandb_project,
             name=args.wandb_run_name,
             settings=wandb.Settings(start_method="thread"),
-            config={
-                "epochs": args.epochs,
-                "lr": args.lr,
-                "num_classes": len(classes),
-                "job_id": os.environ.get("LSB_JOBID"),
-            },
+            config=args.__dict__
         )
 
-        # You can use either WandbCallback OR your WandbMetricsCallback.
-        # If you keep your custom one, set WandbCallback to minimal or omit it.
         callbacks += [
-            # Optional: logs keras metrics automatically; nice but can overlap with custom logs
-            # WandbCallback(save_model=False),
-            WandbMetricsCallback(),  # your explicit logging callback
+            WandbMetricsCallback(), 
         ]
 
     history = model.fit(
@@ -91,7 +84,6 @@ def main():
         callbacks=callbacks,
     )
 
-    # ---- Optional W&B finalize ----
     if args.use_wandb:
         idx = best_prefix + ".index"
         dat = best_prefix + ".data-00000-of-00001"

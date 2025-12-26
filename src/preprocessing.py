@@ -19,7 +19,7 @@ random.seed(seed)
 np.random.seed(seed)
 tf.random.set_seed(seed)
 
-def get_datasets(sample_rate: int = SAMPLE_RATE, batch_size: int = BATCH_SIZE, repeat_train: bool = True)-> tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset, list[str], list[str]]:
+def get_datasets(sample_rate: int = SAMPLE_RATE, batch_size: int = BATCH_SIZE, repeat_train: bool = True, frames: int = 32) -> tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset, list[str], list[str]]:
     """Build train/val/test datasets and return them plus metadata."""
     train_df, val_df, test_df, classes, background_noise_files = load_data_from_files()
 
@@ -35,7 +35,8 @@ def get_datasets(sample_rate: int = SAMPLE_RATE, batch_size: int = BATCH_SIZE, r
         repeat=repeat_train,
         final_data='logmel_spectrogram',
         num_mel_filters=N_MELS,
-        train=True
+        train=True,
+        frames=frames
     )
 
     valid_ds = create_tf_dataset(
@@ -47,7 +48,8 @@ def get_datasets(sample_rate: int = SAMPLE_RATE, batch_size: int = BATCH_SIZE, r
         batch_size=batch_size,
         cache=False,
         final_data='logmel_spectrogram',
-        num_mel_filters=N_MELS
+        num_mel_filters=N_MELS,
+        frames=frames
     )
 
     test_ds = create_tf_dataset(
@@ -57,7 +59,8 @@ def get_datasets(sample_rate: int = SAMPLE_RATE, batch_size: int = BATCH_SIZE, r
         noise_prob=0.8,
         batch_size=batch_size,
         final_data='logmel_spectrogram',
-        num_mel_filters=N_MELS
+        num_mel_filters=N_MELS,
+        frames=frames
     )
 
     return train_ds, valid_ds, test_ds, classes, background_noise_files
