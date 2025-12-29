@@ -101,8 +101,8 @@ def build_cnn_tpool2(input_shape=(32, 40, 1), num_classes=12):
         name="conv2",
     )(x)
 
-    # Flatten + low-rank linear layer (32)
-    x = layers.Flatten(name="flatten")(x)
+    x = layers.GlobalMaxPooling2D()(x)
+
     x = layers.Dense(32, activation=None, name="linear_32")(x)
 
     # Nonlinear DNN layer (consistent with your previous implementation)

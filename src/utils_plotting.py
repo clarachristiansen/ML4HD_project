@@ -4,7 +4,7 @@ import tensorflow as tf
 from collections import Counter
 import os
 
-def plot_recording_waveform(audio_sample, noisy_audio_sample, sample_rate):
+def plot_recording_waveform(audio_sample, noisy_audio_sample, sample_rate, name="waveform_comparison.png"):
     """
     Plots the audio_sample and the noisy_audio_sample side by side.
     Assumes inputs are numpy arrays (samples) and already squeezed.
@@ -35,6 +35,7 @@ def plot_recording_waveform(audio_sample, noisy_audio_sample, sample_rate):
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
+    plt.savefig(f"results/{name}", dpi=150)
     plt.show()
 
 #NOTE: function to be added to import, should be removed from the notebook
@@ -42,7 +43,7 @@ def plot_recording_waveform(audio_sample, noisy_audio_sample, sample_rate):
 
 
 
-def plot_spectrogram_and_mfccs(spectrogram, mfccs):
+def plot_spectrogram_and_mfccs(spectrogram, mfccs, name="spectrogram_and_mfccs.png"):
     """
     Plots the Spectrogram and MFCCs side by side.
     
@@ -75,6 +76,7 @@ def plot_spectrogram_and_mfccs(spectrogram, mfccs):
     fig.colorbar(im2, ax=axes[1])
 
     plt.tight_layout()
+    plt.savefig(f"results/{name}", dpi=150)
     plt.show()
 
 
@@ -159,21 +161,31 @@ def save_logmel_examples(ds, classes, out_dir="debug_viz", n=12):
         x = x.numpy()  # (T, F, 1)
         y = int(y.numpy())
 
-        # Remove channel dim -> (T, F)
+        # # Remove channel dim -> (T, F)
         x2 = x[..., 0]
 
-        # Map label to class name if available
+        # # Map label to class name if available
         if isinstance(classes, (list, tuple)) and y < len(classes):
             cname = str(classes[y])
         else:
             cname = f"class{y}"
 
-        # Plot
-        plt.figure()
-        plt.imshow(x2.T, aspect="auto", origin="lower")  # transpose so y-axis = mel bins
-        plt.title(f"Example {i} | label={y} | {cname}")
-        plt.xlabel("Time frames")
-        plt.ylabel("Mel bins")
+        ### TEST START
+        log_spec_viz = tf.math.log(x2 + np.finfo(float).eps).numpy().T
+    
+        im1 = plt.imshow(log_spec_viz, origin='lower', aspect='auto', cmap='viridis')
+        plt.title('Log Spectrogram')
+        plt.ylabel('Frequency Bin')
+        plt.xlabel('Time (Frames)')
+        plt.colorbar(im1, format='%+2.0f Log Power')
+
+        ### TEST END
+        # # Plot
+        # plt.figure()
+        # plt.imshow(x2.T, aspect="auto", origin="lower")  # transpose so y-axis = mel bins
+        # plt.title(f"Example {i} | label={y} | {cname}")
+        # plt.xlabel("Time frames")
+        # plt.ylabel("Mel bins")
 
         # Save image
         safe_cname = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in cname)
@@ -182,8 +194,8 @@ def save_logmel_examples(ds, classes, out_dir="debug_viz", n=12):
         plt.savefig(png_path, dpi=150)
         plt.close()
 
-        # Save raw array too (optional but useful)
-        npz_path = os.path.join(out_dir, f"{i:02d}_label{y}_{safe_cname}.npz")
-        np.savez_compressed(npz_path, x=x2, y=y, cname=cname)
+        # # Save raw array too (optional but useful)
+        # npz_path = os.path.join(out_dir, f"{i:02d}_label{y}_{safe_cname}.npz")
+        # np.savez_compressed(npz_path, x=x2, y=y, cname=cname)
 
     print(f"Saved {n} examples to: {out_dir}/")
