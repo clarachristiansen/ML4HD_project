@@ -22,6 +22,44 @@ class WandbMetricsCallback(tf.keras.callbacks.Callback):
         )
 
 
+class WandbMetricsCallbackInception(tf.keras.callbacks.Callback):
+    def __init__(self, num_heads: int = 1):
+        super().__init__()
+        self.num_heads = num_heads
+    
+    def on_epoch_end(self, epoch, logs=None):
+        log_dict = {
+            "epoch": epoch,
+            "val/loss": logs.get("val_loss"),
+        }
+        for i in range(1, self.num_heads + 1):
+            head_loss = logs.get(f'val_softmax_{i}_loss')
+            head_accuracy = logs.get(f'val_softmax_{i}_accuracy')
+            if head_loss is not None:
+                log_dict[f"val/softmax_{i}_loss"] = head_loss
+            if head_accuracy is not None:
+                log_dict[f"val/softmax_{i}_accuracy"] = head_accuracy
+
+        wandb.log(log_dict)
+
+
+class WandbMetricsCallbackAE(tf.keras.callbacks.Callback):
+    def on_train_batch_end(self, batch, logs=None):
+        wandb.log(
+            {
+                "train/loss": logs["loss"],
+            },
+            commit=False,
+        )
+    
+    def on_epoch_end(self, epoch, logs=None):
+        wandb.log(
+            {
+                "epoch": epoch,
+                "val/loss": logs.get("val_loss"),
+            }
+        )
+
 class WandbCheckpointCallback(tf.keras.callbacks.Callback):
     def __init__(
         self,

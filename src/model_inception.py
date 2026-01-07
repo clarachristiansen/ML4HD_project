@@ -25,7 +25,7 @@ def inception_block(inputs, filters, name='inception_block'):
                            axis=-1, name=f"{name}_concat")
     return x
 
-def build_cnn_inception_small(input_shape=(32, 40, 1), num_classes=12):
+def build_cnn_inception_1(input_shape=(32, 40, 1), num_classes=12):
     """
     Inception-style CNN for keyword spotting.
 
@@ -90,7 +90,7 @@ def build_cnn_inception_small(input_shape=(32, 40, 1), num_classes=12):
     x = layers.Dense(128, activation="relu", name="dnn_128")(x)
     x = layers.Dropout(0.5)(x)
     # Softmax output
-    outputs = layers.Dense(num_classes, activation="softmax", name="softmax")(x)
+    outputs = layers.Dense(num_classes, activation="softmax", name="softmax_1")(x)
 
     model = models.Model(inputs=inputs, outputs=outputs, name="cnn_inception")
 
@@ -99,7 +99,7 @@ def build_cnn_inception_small(input_shape=(32, 40, 1), num_classes=12):
 
 ### MEDIUM
 
-def build_cnn_inception_medium(input_shape=(32, 40, 1), num_classes=12):
+def build_cnn_inception_2(input_shape=(32, 40, 1), num_classes=12):
     """
     Inception-style CNN for keyword spotting.
 
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False, frames=frames)
 
     if size == 'small':
-        model_inception = build_cnn_inception_medium(num_classes=len(classes), input_shape=(frames, 40, 1))
+        model_inception = build_cnn_inception_1(num_classes=len(classes), input_shape=(frames, 40, 1))
         model_inception.summary()
 
         model_inception.compile(
@@ -202,7 +202,7 @@ if __name__ == "__main__":
             epochs=10,
         )
     elif size == 'medium':
-        model_inception = build_cnn_inception_medium(num_classes=len(classes), input_shape=(frames, 40, 1))
+        model_inception = build_cnn_inception_2(num_classes=len(classes), input_shape=(frames, 40, 1))
         model_inception.summary()
 
         model_inception.compile(

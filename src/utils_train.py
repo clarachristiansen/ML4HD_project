@@ -1,4 +1,5 @@
 from typing import Any, Callable, Dict, Optional
+import wandb
 import tensorflow as tf
 
 class Trainer():
@@ -25,3 +26,89 @@ class StandardTrainer(Trainer):
             callbacks=callbacks,
         )
         return {'model': model, 'history': history}
+    
+class InceptionTrainer(Trainer):
+    """Trainer for inception architectures with different number of heads."""
+    def __init__(self, build_function: Callable, num_heads: int = 1):
+        self.build_function = build_function
+        self.num_heads = num_heads
+
+    def train(self, args, train_ds, val_ds, classes, callbacks) -> dict:
+        model = self.build_function(input_shape=(args.frames, 40, 1), num_classes=len(classes))
+        
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            loss={
+                f'softmax_{i}': tf.keras.losses.SparseCategoricalCrossentropy()
+                for i in range(1, self.num_heads + 1)
+            },
+            loss_weights={
+                f"softmax_{i}": 0.3 if i < self.num_heads else 1.0
+                for i in range(1, self.num_heads + 1)
+            },
+            metrics={
+                f"softmax_{i}": ["accuracy"]
+                for i in range(1, self.num_heads + 1)
+            }
+        )
+
+        train_ds_heads = train_ds.map(lambda x, y: (x, {f"softmax_{i}": y for i in range(1, self.num_heads + 1)}))
+        val_ds_heads = val_ds.map(lambda x, y: (x, {f"softmax_{i}": y for i in range(1, self.num_heads + 1)}))
+
+        history = model.fit(
+            train_ds_heads,
+            validation_data=val_ds_heads,
+            epochs=args.epochs,
+            callbacks=callbacks,
+        )
+        return {'model': model, 'history': history}
+
+class EncoderSVMTrainer(Trainer):
+    """Trainer for CNN + SVM architecture."""
+    def __init__(self, build_autoencoder_function: Callable, extract_features_function: Callable, build_svm_function: Callable):
+        self.build_autoencoder_function = build_autoencoder_function
+        self.extract_features_function = extract_features_function
+        self.build_svm_function = build_svm_function
+    
+    def train(self, args, train_ds, val_ds, classes, callbacks) -> dict:
+        train_ae = train_ds.map(lambda x, y: (x, x))
+        val_ae = val_ds.map(lambda x, y: (x, x))
+
+        autoencoder, encoder_for_svm = self.build_autoencoder_function()
+
+        autoencoder.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            loss=tf.keras.losses.MeanSquaredError(),
+        )
+
+        history_ae = autoencoder.fit(
+            train_ae,
+            validation_data=val_ae,
+            epochs=args.epochs,
+            callbacks=callbacks, ## OBS CALLBACK HERE? Only in svm or nice in ae also - but can wandb log both? Make new callback?
+        )
+
+        print("Training of autoencoder complete.")
+
+        X_train, y_train = self.extract_features_function(encoder_for_svm, train_ds)
+        X_val, y_val     = self.extract_features_function(encoder_for_svm, val_ds)
+        print(f"Extracted features shape: train {X_train.shape}, val {X_val.shape}")
+
+        svm_model = self.build_svm_function(kernel="linear", C=1.0, class_weight="balanced", probability=False)
+        svm_model.fit(X_train, y_train)
+
+        y_train_pred = svm_model.predict(X_train)
+        y_val_pred   = svm_model.predict(X_val)
+        train_acc = float((y_train == y_train_pred).sum() / len(y_train))
+        val_acc = float((y_val == y_val_pred).sum() / len(y_val))
+
+        wandb.log({
+            f"svm/train_acc": train_acc,
+            f"svm/val_acc": val_acc,
+        })
+        print("Training of SVM complete.")
+        return {'autoencoder_model': autoencoder, 'svm_model': svm_model, 'history_ae': history_ae}
+
+
+
+
