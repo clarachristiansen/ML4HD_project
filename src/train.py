@@ -4,6 +4,7 @@ import tensorflow as tf
 import wandb
 from .preprocessing import get_datasets
 from .model_sainath import build_cnn_trad_fpool3, build_cnn_tpool2
+from .model_se import build_cnn_tpool2_se
 from .model_inception import build_cnn_inception_1, build_cnn_inception_2
 from .model_autoencoder import build_cnn_autoencoder_for_svm, extract_features, build_svm
 from .utils_train import StandardTrainer, InceptionTrainer, EncoderSVMTrainer
@@ -31,6 +32,8 @@ def main():
         trainer = StandardTrainer(build_cnn_trad_fpool3)
     elif args.architecture == "cnn_tpool2":
         trainer = StandardTrainer(build_cnn_tpool2)
+    elif args.architecture == "cnn_tpool2_se":
+        trainer = StandardTrainer(build_cnn_tpool2_se)
     elif args.architecture == "cnn_inception_1":
         trainer = InceptionTrainer(build_cnn_inception_1, num_heads=1)
     elif args.architecture == "cnn_inception_2":
