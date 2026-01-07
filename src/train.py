@@ -6,7 +6,6 @@ from .preprocessing import get_datasets
 from .model_sainath import build_cnn_trad_fpool3, build_cnn_tpool2
 from .model_se import build_cnn_tpool2_se
 from .model_inception import build_cnn_inception_1, build_cnn_inception_2
-from .model_autoencoder import build_cnn_autoencoder_for_svm, extract_features, build_svm
 from .utils_train import StandardTrainer, InceptionTrainer, EncoderSVMTrainer
 from .wandb import WandbMetricsCallback, WandbMetricsCallbackInception, WandbMetricsCallbackAE
 
@@ -38,8 +37,6 @@ def main():
         trainer = InceptionTrainer(build_cnn_inception_1, num_heads=1)
     elif args.architecture == "cnn_inception_2":
         trainer = InceptionTrainer(build_cnn_inception_2, num_heads=2)
-    elif args.architecture == "encoder_svm":
-        trainer = EncoderSVMTrainer(build_cnn_autoencoder_for_svm, extract_features, build_svm)
     else:
         raise ValueError(f"Unknown architecture: {args.architecture}")
 
@@ -75,10 +72,6 @@ def main():
         if trainer.__class__.__name__ == "InceptionTrainer":
             callbacks += [
                 WandbMetricsCallbackInception(num_heads=trainer.num_heads),
-            ]
-        elif trainer.__class__.__name__ == "EncoderSVMTrainer":
-            callbacks = [
-                WandbMetricsCallbackAE(),
             ]
         else:
             callbacks += [
