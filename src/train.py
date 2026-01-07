@@ -4,8 +4,9 @@ import tensorflow as tf
 import wandb
 from .preprocessing import get_datasets
 from .model_sainath import build_cnn_trad_fpool3, build_cnn_tpool2
-from .wandb import WandbMetricsCallback  # your custom callback
-
+from .model_inception import build_cnn_inception_small, build_cnn_inception_medium
+from .utils_train import StandardTrainer
+from .wandb import WandbMetricsCallback  
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -22,27 +23,18 @@ def parse_args():
 
 def main():
     args = parse_args()
-    print("Training with args:", args.__dict__)
+
     train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False, frames=args.frames)
 
     if args.architecture == "cnn_trad_fpool3":
-        model = build_cnn_trad_fpool3(input_shape=(args.frames, 40, 1), num_classes=len(classes))
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-            metrics=["accuracy"],
-        )
+        trainer = StandardTrainer(build_cnn_trad_fpool3)
     elif args.architecture == "cnn_tpool2":
-        model = build_cnn_tpool2(input_shape=(args.frames, 40, 1), num_classes=len(classes))
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-            metrics=["accuracy"],
-        )
-    # MAYBE MORE!!!
+        trainer = StandardTrainer(build_cnn_tpool2)
+    elif args.architecture == "cnn_inception_small":
+        trainer = StandardTrainer(build_cnn_inception_small)
     else:
         raise ValueError(f"Unknown architecture: {args.architecture}")
-    
+
     best_prefix = "results/best.ckpt"  
 
     callbacks = [
@@ -76,13 +68,7 @@ def main():
         callbacks += [
             WandbMetricsCallback(), 
         ]
-
-    history = model.fit(
-        train_ds,
-        validation_data=val_ds,
-        epochs=args.epochs,
-        callbacks=callbacks,
-    )
+    result = trainer.train(args, train_ds, val_ds, classes, callbacks)
 
     if args.use_wandb:
         idx = best_prefix + ".index"
@@ -94,6 +80,8 @@ def main():
         except Exception as e:
             print("WARN: saving best weights files to wandb failed. Error:", repr(e))
         wandb.finish()
+    print("Training complete.")
 
+    
 if __name__ == "__main__":
     main()
