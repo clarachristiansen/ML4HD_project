@@ -9,11 +9,12 @@ class Trainer():
 
 class StandardTrainer(Trainer):
     """Standard Keras model trainer."""
-    def __init__(self, build_function: Callable):
+    def __init__(self, build_function: Callable, channels: int = 40):
         self.build_function = build_function
+        self.channels = channels
 
     def train(self, args, train_ds, val_ds, classes, callbacks) -> dict:
-        model = self.build_function(input_shape=(args.frames, 40, 1), num_classes=len(classes))
+        model = self.build_function(input_shape=(args.frames, self.channels, 1), num_classes=len(classes))
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=args.lr),
             loss=tf.keras.losses.SparseCategoricalCrossentropy(),
@@ -29,12 +30,13 @@ class StandardTrainer(Trainer):
     
 class InceptionTrainer(Trainer):
     """Trainer for inception architectures with different number of heads."""
-    def __init__(self, build_function: Callable, num_heads: int = 1):
+    def __init__(self, build_function: Callable, num_heads: int = 1, channels: int = 40):
         self.build_function = build_function
         self.num_heads = num_heads
+        self.channels = channels
 
     def train(self, args, train_ds, val_ds, classes, callbacks) -> dict:
-        model = self.build_function(input_shape=(args.frames, 40, 1), num_classes=len(classes))
+        model = self.build_function(input_shape=(args.frames, self.channels, 1), num_classes=len(classes))
         
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),

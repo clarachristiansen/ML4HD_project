@@ -76,8 +76,8 @@ def apply_random_noise(wav, background_noise_files, target_length, noise_prob, m
 # Convert waveform to spectrogram
 def get_spectrogram(wav, sample_rate):
 
-    frame_length = int(sample_rate * 0.025)
-    frame_step = int(sample_rate * 0.010)
+    frame_length = FRAME_LENGTH
+    frame_step = FRAME_STEP
 
     spectrogram = tf.signal.stft(wav,
                                  frame_length= frame_length,
@@ -162,7 +162,8 @@ def get_mfccs(log_mel_spectrogram, wav, frame_length=FRAME_LENGTH, frame_step=FR
 
     # obtain final MFCCs
     mfccs = tf.concat([mfccs_0, log_frame_energy, mfccs_delta_1, energy_delta_1, mfccs_delta_2, energy_delta_2], axis=-1)
-
+    # FOR CNN expand dims to have channel dimension
+    mfccs = tf.expand_dims(mfccs, -1)
     return mfccs
 
 # Adjacency matrix creation functions
@@ -377,6 +378,11 @@ def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob
             lambda mel_spec, wav, label: prepare_mel_for_cnn(mel_spec, wav, label, train=train, desired_frames=frames),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
+    elif final_data == 'mfccs':
+        dataset = dataset.map(
+            lambda mel_spec, wav, label: (get_mfccs(mel_spec, wav), label),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
 
     if cache:
         dataset = dataset.cache(cache_file)
@@ -450,7 +456,22 @@ def load_data_from_files(verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFr
             'split': 'test'})
     return train_df, val_df, test_df, classes, background_noise_files
 
+def load_data_from_files_demo(verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list, list]:
+    data_dir = SCRIPT_DIR.parent / 'data'
+    validation_samples = 'validation_list.txt'
+    test_samples = 'demo_list.txt'
+    _, _, _, _, _, _, test_files, test_labels, test_labels_str, classes = load_audio_dataset(
+                data_dir=data_dir,
+                validation_samples=os.path.join(data_dir, validation_samples),
+                test_samples=os.path.join(data_dir, test_samples)
+            )
 
+    test_df = pd.DataFrame({
+            'file_path': test_files,
+            'label': test_labels,
+            'label_str': test_labels_str,
+            'split': 'test'})
+    return test_df, classes
 
 
 if __name__ == "__main__":
