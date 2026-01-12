@@ -311,7 +311,7 @@ def prepare_mel_for_cnn(mel_spec, wav, label, desired_frames=32, train=False):
 
 
 # Final dataset creation function
-def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob, cache_file = '', batch_size = 16, cache = False, shuffle = False, repeat = False, noise = False, final_data = Literal['logmel_spectrogram','graph_tensor'], num_mel_filters=13, train=False, frames=32) -> tf.data.Dataset:
+def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob, cache_file = '', batch_size = 16, cache = False, shuffle = False, repeat = False, noise = False, final_data = Literal['logmel_spectrogram', 'mfccs','graph_tensor'], num_mel_filters=13, train=False, frames=32) -> tf.data.Dataset:
 
     # obtain file names and numerical labels
     file_names, labels = dataframe["file_path"], tf.cast(dataframe["label"], tf.int32)
@@ -383,6 +383,7 @@ def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob
             lambda mel_spec, wav, label: (get_mfccs(mel_spec, wav), label),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
+        print('Computed MFCCs for CNN input')
 
     if cache:
         dataset = dataset.cache(cache_file)

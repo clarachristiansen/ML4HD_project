@@ -40,10 +40,12 @@ set +a
 
 ARCHITECTURE="cnn_tpool2_se"
 FRAMES=98
+FINAL_DATA="mfccs"
 
 ### Run
 python -m src.train --use_wandb \
-                    --wandb_run_name "train_${ARCHITECTURE}_frames${FRAMES}_${LSB_JOBID}" \
+                    --wandb_run_name "train_${ARCHITECTURE}_${FINAL_DATA}_frames${FRAMES}_${LSB_JOBID}" \
                     --architecture ${ARCHITECTURE} \
                     --epochs 25 \
-                    --frames ${FRAMES}
+                    --frames ${FRAMES} \
+                    --final_data ${FINAL_DATA}
