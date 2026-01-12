@@ -106,7 +106,7 @@ def build_cnn_tpool2(input_shape=(32, 40, 1), num_classes=12):
     x = layers.Dense(32, activation=None, name="linear_32")(x)
 
     # Nonlinear DNN layer (consistent with your previous implementation)
-    x = layers.Dense(128, activation="relu", name="dnn_128")(x)
+    #x = layers.Dense(128, activation="relu", name="dnn_128")(x)
 
     outputs = layers.Dense(num_classes, activation="softmax", name="softmax")(x)
 

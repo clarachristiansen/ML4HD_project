@@ -46,7 +46,6 @@ def build_cnn_tpool2_se(input_shape=(32, 40, 1), num_classes=12, se_reduction=8)
 
     x = layers.Conv2D(94, kernel_size=(6, 4), strides=(1, 1), padding="valid", activation="relu", name="conv2")(x)
     x = se_block(x, reduction=se_reduction, name="se2")
-    x = layers.MaxPool2D(pool_size=(1, 3), strides=(1, 3), padding="valid", name="pool2_freq")(x)
 
     x = layers.GlobalMaxPooling2D(name="global_max_pool")(x)
     x = layers.Dense(32, activation="relu", name="dense")(x)
