@@ -8,7 +8,7 @@ from .model_se import build_cnn_tpool2_se
 from .model_cbam import build_cnn_tpool2_cbam
 from .model_inception import build_cnn_inception_1, build_cnn_inception_2
 from .utils_train import StandardTrainer, InceptionTrainer
-from .wandb import WandbMetricsCallback, WandbMetricsCallbackInception, WandbMetricsCallbackAE
+from .wandb import WandbMetricsCallback, WandbMetricsCallbackInception
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -20,7 +20,7 @@ def parse_args():
     p.add_argument("--wandb_project", type=str, default="ML4HD_project")
     p.add_argument("--wandb_run_name", type=str, default=None)
     p.add_argument("--frames", type=int, default=32)
-    p.add_argument("--final_data", type=str, default='logmel_spectrogram', help="Type of input features: 'logmel_spectrogram' or 'mfccs'")
+    p.add_argument("--final_data", type=str, default='logmel_spectrogram', help="Type of input features: 'logmel_spectrogram', 'logmel_spectrogram_bins', 'mel_pcen_a', 'mel_pcen_b' or 'mfccs'")
     return p.parse_args()
 
 
@@ -28,6 +28,8 @@ def main():
     args = parse_args()
     if args.final_data == 'mfccs':
         channels = 120
+    else:
+        channels = 40
 
     train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False, frames=args.frames, final_data=args.final_data)
 
