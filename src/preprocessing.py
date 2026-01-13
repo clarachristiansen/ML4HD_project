@@ -67,7 +67,7 @@ def get_datasets(sample_rate: int = SAMPLE_RATE, batch_size: int = BATCH_SIZE, r
 
 
 if __name__ == "__main__":
-    train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(frames=98, final_data='mfccs')
+    train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(frames=98, final_data='mel_pcen_a') #'logmel_spectrogram_bins'
     print(f"Number of classes: {len(classes)}  {classes}")
     batch = next(iter(train_ds))
     print(type(batch[0]), batch[0].shape, batch[1].shape)

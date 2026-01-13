@@ -89,8 +89,25 @@ def get_spectrogram(wav, sample_rate):
 
     return spectrogram, wav
 
+def apply_pcen(mel_spectrogram, alpha=0.98, delta=2, r=0.5, smooth_coef=0.025, eps=1e-6):
+    # Compute the smoothed version of the mel spectrogram
+    mel_spectrogram = tf.convert_to_tensor(mel_spectrogram, dtype=tf.float32)
+    # Ensure non-negativity
+    mel_spectrogram = tf.maximum(mel_spectrogram, 0.0)
+
+    def ema_step(prev, cur):
+        return (1.0 - smooth_coef) * prev + smooth_coef * cur
+    
+    init = mel_spectrogram[0]
+    M = tf.scan(ema_step, mel_spectrogram[1:], initializer=init)
+    M = tf.concat([tf.expand_dims(init, axis=0), M], axis=0)
+
+    # PCEN formula
+    pcen_feat = tf.pow(mel_spectrogram / tf.pow(eps + M, alpha) + delta, r) - tf.pow(delta, r)
+    return pcen_feat
+
 # Compute Mel-filterbank features and MFCCs
-def apply_mel_filterbanks(spectrogram, wav, sample_rate, num_mel_filters=13):
+def apply_mel_filterbanks(spectrogram, wav, sample_rate, num_mel_filters=13, final_data='logmel_spectrogram'):
 
     # Obtain the number of frequency bins of our spectrogram.
     num_spectrogram_bins = tf.shape(spectrogram)[-1]
@@ -110,9 +127,49 @@ def apply_mel_filterbanks(spectrogram, wav, sample_rate, num_mel_filters=13):
     mel_spectrogram = tf.reshape(mel_spectrogram, output_shape)
 
     # Compute a stabilized log to get log-magnitude mel-scale spectrogram
+    if final_data == 'mel_pcen_a':
+        final_mel_spectrogram = apply_pcen(mel_spectrogram, alpha=0.98, delta=2.0, r=0.5, eps=1e-6, smooth_coef=0.04)
+    elif final_data == 'mel_pcen_b':
+        final_mel_spectrogram = apply_pcen(mel_spectrogram, alpha=0.8, delta=10.0, r=0.5, eps=1e-6, smooth_coef=0.15)
+    else:
+        final_mel_spectrogram = tf.math.log(mel_spectrogram + np.finfo(float).eps)
+
+    return final_mel_spectrogram, wav
+
+def apply_mel_filterbanks_bins(spectrogram, wav, sample_rate, num_mel_filters=13):
+    # Obtain the number of frequency bins of our spectrogram.
+    num_spectrogram_bins = tf.shape(spectrogram)[-1]
+
+    bands=((100.0, 300.0, 6), (300.0, 4000.0, 28), (4000.0, 7600.0, 6))
+
+    # Build each piece with the SAME num_spectrogram_bins so they can be concatenated
+    mats = []
+    total_mels = 0
+    for (fmin, fmax, m) in bands:
+        total_mels += int(m)
+        mats.append(
+            tf.signal.linear_to_mel_weight_matrix(
+                num_mel_bins=int(m),
+                num_spectrogram_bins=num_spectrogram_bins,
+                sample_rate=sample_rate,
+                lower_edge_hertz=float(fmin),
+                upper_edge_hertz=float(fmax),
+            )
+        )
+
+    # [F, total_mels]
+    mel_weight_matrix = tf.concat(mats, axis=1)
+
+    mel_spectrogram = tf.tensordot(spectrogram, mel_weight_matrix, axes= 1)
+
+    # Set output shape
+    output_shape = tf.concat([tf.shape(spectrogram)[:-1], [tf.shape(mel_spectrogram)[-1]]], axis=0)
+    mel_spectrogram = tf.reshape(mel_spectrogram, output_shape)
+
     log_mel_spectrogram = tf.math.log(mel_spectrogram + np.finfo(float).eps)
 
     return log_mel_spectrogram, wav
+
 
 
 def compute_delta(mfccs, M):
@@ -311,7 +368,7 @@ def prepare_mel_for_cnn(mel_spec, wav, label, desired_frames=32, train=False):
 
 
 # Final dataset creation function
-def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob, cache_file = '', batch_size = 16, cache = False, shuffle = False, repeat = False, noise = False, final_data = Literal['logmel_spectrogram', 'mfccs','graph_tensor'], num_mel_filters=13, train=False, frames=32) -> tf.data.Dataset:
+def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob, cache_file = '', batch_size = 16, cache = False, shuffle = False, repeat = False, noise = False, final_data = Literal['logmel_spectrogram', 'logmel_spectrogram_bins', 'mel_pcen_a', 'mel_pcen_b', 'mfccs','graph_tensor'], num_mel_filters=13, train=False, frames=32) -> tf.data.Dataset:
 
     # obtain file names and numerical labels
     file_names, labels = dataframe["file_path"], tf.cast(dataframe["label"], tf.int32)
@@ -352,12 +409,18 @@ def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob
 
     # Apply the Mel filters
     # use *apply_mel_filterbanks(spec, wav, sample_rate) - same as above
-    apply_mel_filterbanks_lambda = lambda spec, wav, label: (*apply_mel_filterbanks(spec, wav, sample_rate, num_mel_filters=num_mel_filters), label)
+    if final_data == 'logmel_spectrogram_bins':
+        apply_mel_filterbanks_lambda = lambda spec, wav, label: (*apply_mel_filterbanks_bins(spec, wav, sample_rate, num_mel_filters=num_mel_filters), label)
+        print('Using logmel spectrogram with custom frequency bins')
+    else:
+        apply_mel_filterbanks_lambda = lambda spec, wav, label: (*apply_mel_filterbanks(spec, wav, sample_rate, num_mel_filters=num_mel_filters, final_data=final_data), label)
+        print('Using mel filterbanks with:', final_data)
+
     dataset = dataset.map(apply_mel_filterbanks_lambda, num_parallel_calls = os.cpu_count())
     # Check for NaNs right after mel stage
-    ds_mid = dataset.take(1)  # right after mel stage in your code
-    mel_spec, wav, label = next(iter(ds_mid))
-    print("NaNs after mel:", tf.reduce_sum(tf.cast(tf.math.is_nan(mel_spec), tf.int32)).numpy(), flush=True)
+    #ds_mid = dataset.take(1)  # right after mel stage in your code
+    #mel_spec, wav, label = next(iter(ds_mid))
+    #print("NaNs after mel:", tf.reduce_sum(tf.cast(tf.math.is_nan(mel_spec), tf.int32)).numpy(), #flush=True)
 
     if final_data == 'graph_tensor':
         # Compute MFCC + Delta features using the get_mfccs() function
@@ -372,7 +435,7 @@ def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob
         mfccs_to_graph_tensors_for_dataset_lambda = lambda mfcc, adjacency_matrix, label: (mfccs_to_graph_tensors_for_dataset(mfcc, adjacency_matrix, label, REDUCED_NODE_REP_BOOL, REDUCED_NODE_REP_K), label)
         dataset = dataset.map(mfccs_to_graph_tensors_for_dataset_lambda, num_parallel_calls = tf.data.AUTOTUNE)
         print('Converted MFCCs to Graph Tensors')
-    elif final_data == 'logmel_spectrogram':
+    elif final_data in ['logmel_spectrogram', 'logmel_spectrogram_bins', 'mel_pcen_a', 'mel_pcen_b']:
         # Compute Log-Mel Spectrograms using the get_log_mel_spectrogram() function
         dataset = dataset.map(
             lambda mel_spec, wav, label: prepare_mel_for_cnn(mel_spec, wav, label, train=train, desired_frames=frames),
@@ -384,6 +447,8 @@ def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob
             num_parallel_calls=tf.data.AUTOTUNE,
         )
         print('Computed MFCCs for CNN input')
+    else:
+        raise ValueError(f"Unsupported final_data type: {final_data}")
 
     if cache:
         dataset = dataset.cache(cache_file)
