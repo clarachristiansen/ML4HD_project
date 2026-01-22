@@ -26,19 +26,43 @@ class WandbMetricsCallbackInception(tf.keras.callbacks.Callback):
     def __init__(self, num_heads: int = 1):
         super().__init__()
         self.num_heads = num_heads
-    
+
+    def on_train_begin(self, logs=None):
+        # Ensure epoch is the step axis for these metrics
+        wandb.define_metric("epoch")
+        wandb.define_metric("train/*", step_metric="epoch")
+        wandb.define_metric("val/*", step_metric="epoch")
+
     def on_epoch_end(self, epoch, logs=None):
-        log_dict = {
-            "epoch": epoch,
-            "val/loss": logs.get("val_loss"),
-        }
+        logs = logs or {}
+
+        log_dict = {"epoch": epoch}
+
+        # inception_1 
+        if logs.get("loss") is not None:
+            log_dict["train/loss"] = float(logs["loss"])
+        if logs.get("accuracy") is not None:
+            log_dict["train/accuracy"] = float(logs["accuracy"])
+        if logs.get("val_loss") is not None:
+            log_dict["val/loss"] = float(logs["val_loss"])
+        if logs.get("val_accuracy") is not None:
+            log_dict["val/accuracy"] = float(logs["val_accuracy"])
+
+        # inception_x where x > 1
         for i in range(1, self.num_heads + 1):
-            head_loss = logs.get(f'val_softmax_{i}_loss')
-            head_accuracy = logs.get(f'val_softmax_{i}_accuracy')
-            if head_loss is not None:
-                log_dict[f"val/softmax_{i}_loss"] = head_loss
-            if head_accuracy is not None:
-                log_dict[f"val/softmax_{i}_accuracy"] = head_accuracy
+            tr_l = logs.get(f"softmax_{i}_loss")
+            tr_a = logs.get(f"softmax_{i}_accuracy")
+            va_l = logs.get(f"val_softmax_{i}_loss")
+            va_a = logs.get(f"val_softmax_{i}_accuracy")
+
+            if tr_l is not None:
+                log_dict[f"train/softmax_{i}_loss"] = float(tr_l)
+            if tr_a is not None:
+                log_dict[f"train/softmax_{i}_accuracy"] = float(tr_a)
+            if va_l is not None:
+                log_dict[f"val/softmax_{i}_loss"] = float(va_l)
+            if va_a is not None:
+                log_dict[f"val/softmax_{i}_accuracy"] = float(va_a)
 
         wandb.log(log_dict)
 

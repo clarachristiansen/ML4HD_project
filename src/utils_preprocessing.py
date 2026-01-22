@@ -46,7 +46,7 @@ def apply_random_noise(wav, background_noise_files, target_length, noise_prob, m
     background_noise_files = tf.convert_to_tensor(background_noise_files, dtype=tf.string)
 
     # Select a random noise file
-    noise_file = tf.random.shuffle(background_noise_files)[0]
+    noise_file = tf.random.shuffle(background_noise_files, seed=24)[0]
     noise_wav = read_path_to_wav(noise_file)
 
     # Extract a random segment of the desired length
@@ -377,7 +377,7 @@ def create_tf_dataset(dataframe, sample_rate, background_noise_files, noise_prob
     dataset = tf.data.Dataset.from_tensor_slices((file_names, labels))
 
     if shuffle:
-        dataset = dataset.shuffle(len(file_names), reshuffle_each_iteration=True)
+        dataset = dataset.shuffle(len(file_names), reshuffle_each_iteration=True, seed=24)
 
     # Loading and decoding wav files using read_path_to_wav and then map the function to the dataset
     read_path_to_wav_lambda = lambda file_path, label: (read_path_to_wav(file_path), label)

@@ -1,5 +1,7 @@
 import argparse
 import os
+import random
+import numpy as np
 import tensorflow as tf
 import wandb
 from .preprocessing import get_datasets
@@ -7,6 +9,7 @@ from .model_sainath import build_cnn_trad_fpool3, build_cnn_tpool2
 from .model_se import build_cnn_tpool2_se
 from .model_cbam import build_cnn_tpool2_cbam
 from .model_inception import build_cnn_inception_1, build_cnn_inception_2
+from .model_inception_attention import build_cnn_inception_1_attention, build_cnn_inception_2_attention
 from .utils_train import StandardTrainer, InceptionTrainer
 from .wandb import WandbMetricsCallback, WandbMetricsCallbackInception
 
@@ -21,17 +24,27 @@ def parse_args():
     p.add_argument("--wandb_run_name", type=str, default=None)
     p.add_argument("--frames", type=int, default=32)
     p.add_argument("--final_data", type=str, default='logmel_spectrogram', help="Type of input features: 'logmel_spectrogram', 'logmel_spectrogram_bins', 'mel_pcen_a', 'mel_pcen_b' or 'mfccs'")
+    p.add_argument("--seed", type=int, default=24, help="Random seed for reproducibility")
     return p.parse_args()
+
+def set_seed(seed: int):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
 
 
 def main():
     args = parse_args()
+    set_seed(args.seed)
     if args.final_data == 'mfccs':
         channels = 120
     else:
         channels = 40
 
     train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False, frames=args.frames, final_data=args.final_data)
+    test = train_ds.take(1)  # Force dataset initialization
+    print("Training instance shape:", tf.shape(next(iter(test))[0]))
 
     if args.architecture == "cnn_trad_fpool3":
         trainer = StandardTrainer(build_cnn_trad_fpool3, channels=channels)
@@ -45,6 +58,10 @@ def main():
         trainer = InceptionTrainer(build_cnn_inception_1, channels=channels, num_heads=1)
     elif args.architecture == "cnn_inception_2":
         trainer = InceptionTrainer(build_cnn_inception_2, channels=channels, num_heads=2)
+    elif args.architecture == "cnn_inception_1_attention":
+        trainer = InceptionTrainer(build_cnn_inception_1_attention, channels=channels, num_heads=1)
+    elif args.architecture == "cnn_inception_2_attention":
+        trainer = InceptionTrainer(build_cnn_inception_2_attention, channels=channels, num_heads=2)
     else:
         raise ValueError(f"Unknown architecture: {args.architecture}")
 

@@ -183,7 +183,7 @@ def build_cnn_inception_2(input_shape=(32, 40, 1), num_classes=12):
 
 if __name__ == "__main__":
     frames = 98
-    size = 'medium'
+    size = 'small'
     train_ds, val_ds, test_ds, classes, background_noise_files = get_datasets(repeat_train=False, frames=frames)
 
     if size == 'small':
@@ -192,8 +192,9 @@ if __name__ == "__main__":
 
         model_inception.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-            metrics=["accuracy"],
+            loss={'softmax_1': tf.keras.losses.SparseCategoricalCrossentropy()},
+            loss_weights={"softmax_1": 1.0},
+            metrics={"softmax_1": ["accuracy"]},
         )
 
         history = model_inception.fit(
