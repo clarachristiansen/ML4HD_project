@@ -37,25 +37,34 @@ class InceptionTrainer(Trainer):
 
     def train(self, args, train_ds, val_ds, classes, callbacks) -> dict:
         model = self.build_function(input_shape=(args.frames, self.channels, 1), num_classes=len(classes))
-        
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-            loss={
-                f'softmax_{i}': tf.keras.losses.SparseCategoricalCrossentropy()
-                for i in range(1, self.num_heads + 1)
-            },
-            loss_weights={
-                f"softmax_{i}": 0.3 if i < self.num_heads else 1.0
-                for i in range(1, self.num_heads + 1)
-            },
-            metrics={
-                f"softmax_{i}": ["accuracy"]
-                for i in range(1, self.num_heads + 1)
-            }
-        )
+    
+        if self.num_heads == 1:
+            model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+                metrics=["accuracy"],
+            )
+            train_ds_heads = train_ds
+            val_ds_heads = val_ds
+        else: 
+            model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                loss={
+                    f'softmax_{i}': tf.keras.losses.SparseCategoricalCrossentropy()
+                    for i in range(1, self.num_heads + 1)
+                },
+                loss_weights={
+                    f"softmax_{i}": 0.3 if i < self.num_heads else 1.0
+                    for i in range(1, self.num_heads + 1)
+                },
+                metrics={
+                    f"softmax_{i}": ["accuracy"]
+                    for i in range(1, self.num_heads + 1)
+                }
+            )
 
-        train_ds_heads = train_ds.map(lambda x, y: (x, {f"softmax_{i}": y for i in range(1, self.num_heads + 1)}))
-        val_ds_heads = val_ds.map(lambda x, y: (x, {f"softmax_{i}": y for i in range(1, self.num_heads + 1)}))
+            train_ds_heads = train_ds.map(lambda x, y: (x, {f"softmax_{i}": y for i in range(1, self.num_heads + 1)}))
+            val_ds_heads = val_ds.map(lambda x, y: (x, {f"softmax_{i}": y for i in range(1, self.num_heads + 1)}))
 
         history = model.fit(
             train_ds_heads,

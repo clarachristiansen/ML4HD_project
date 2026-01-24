@@ -6,7 +6,7 @@ import tensorflow_gnn as tfgnn
 from pathlib import Path
 from .utils_lab import load_audio_dataset
 from typing import Literal
-
+import matplotlib.pyplot as plt
 
 ### GLOBAL variables
 from config import (FRAME_LENGTH,
@@ -541,5 +541,50 @@ def load_data_from_files_demo(verbose: bool = False) -> tuple[pd.DataFrame, pd.D
 
 
 if __name__ == "__main__":
-    print("This is a utility module for preprocessing. Please import it to use its functions.")
+    train_df, val_df, test_df, classes, background_noise_files = load_data_from_files(verbose=False)
+    #print(train_df.label_str)
+    print(f"Number of unique labels in training set:", len(train_df.label.unique()))
+    feature_types = ['logmel_spectrogram', 'logmel_spectrogram_bins', 'mel_pcen_a', 'mel_pcen_b', 'mfccs']
+    time_freq_representations = {}
+    for ft in feature_types:
+        ds = create_tf_dataset(
+            train_df,
+            sample_rate=SAMPLE_RATE,
+            background_noise_files=background_noise_files,
+            noise_prob=0.8,
+            batch_size=16,
+            final_data=ft,
+            num_mel_filters=40,
+            frames=98,
+            train=False)
+        x_batch, y_batch = next(iter(ds.take(10)))
+        print("Label:", y_batch[0].numpy())
+        x0 = x_batch[1]
+        time_freq_representations[ft] = x0
 
+    plt.figure(figsize=(30, 5))
+    feature_type_names = {
+        'logmel_spectrogram': 'Log-Mel Spectrogram',
+        'logmel_spectrogram_bins': 'Binned Log-Mel Spectrogram',
+        'mel_pcen_a': 'PCEN-A',
+        'mel_pcen_b': 'PCEN-B',
+        'mfccs': 'MFCCs'
+    }
+    for i, (key, x0) in enumerate(time_freq_representations.items()):
+        plt.subplot(1, 5, i + 1)
+        plt.title(feature_type_names[key])
+
+        # x0 is [T, F, 1] -> squeeze to [T, F]
+        img = tf.squeeze(x0).numpy()
+        
+        plt.imshow(img.T, aspect="auto", origin="lower", cmap="jet")
+        plt.colorbar()
+        plt.xlabel("Time (Frames)")
+        if not key == 'mfccs':
+            plt.ylabel("Frequency Bins")
+        else:
+            plt.ylabel("Coefficients")
+
+    plt.tight_layout()
+    plt.savefig("results/time_frequency_representations.png", dpi=1000)
+    plt.show()

@@ -5,6 +5,14 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import wandb
 
+import time
+import gc
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+
 def compute_topk_accuracy(y_true, y_prob, k=5):
     topk = np.argsort(y_prob, axis=1)[:, -k:]
     correct = np.any(topk == y_true[:, None], axis=1)
@@ -246,3 +254,125 @@ def load_weights(args):
         print(f"[OK] Loaded weights from W&B Files, here: {prefix}")
         return prefix
 
+def _bytes_to_mb(x: int) -> float:
+    return float(x) / (1024.0 * 1024.0)
+
+def get_model_param_stats(model: tf.keras.Model) -> dict:
+    total_params = int(model.count_params())
+    # float32 params ~4 bytes each; (this is only parameters, not activations)
+    param_mem_mb = total_params * 4 / (1024**2)
+    return {
+        "model/params_total": total_params,
+        "model/params_mem_est_mb_fp32": float(param_mem_mb),
+    }
+
+def _get_tf_gpu_mem_mb(gpu_device: str = "GPU:0") -> dict:
+    """
+    Returns current/peak GPU memory if TF exposes it.
+    Not guaranteed on all TF builds/drivers.
+    """
+    out = {}
+    try:
+        info = tf.config.experimental.get_memory_info(gpu_device)
+        # keys usually: 'current', 'peak' in bytes
+        out["gpu/mem_current_mb"] = _bytes_to_mb(info.get("current", 0))
+        out["gpu/mem_peak_mb"] = _bytes_to_mb(info.get("peak", 0))
+    except Exception:
+        pass
+    return out
+
+def measure_inference_resources(
+    model: tf.keras.Model,
+    dataset: tf.data.Dataset,
+    num_batches: int = 50,
+    warmup_batches: int = 10,
+) -> dict:
+    """
+    Measures latency + (process) CPU/RAM while running forward passes on `dataset`.
+    - Uses psutil if available for CPU/RAM.
+    - Uses TF memory_info for GPU if available.
+    """
+    # Prefer deterministic-ish measurements
+    gc.collect()
+    tf.keras.backend.clear_session()  # optional; remove if it breaks your workflow
+
+    # Rebuild/ensure model is "built"
+    # If model already built & weights loaded, fine.
+    # We just need a callable forward pass.
+
+    proc = psutil.Process(os.getpid()) if psutil else None
+    if proc:
+        proc.cpu_percent(interval=None)  # prime
+
+    # Take a baseline RAM reading (RSS)
+    ram_rss_start = proc.memory_info().rss if proc else None
+    ram_rss_peak = ram_rss_start if proc else None
+
+    # Warmup (important for TF graph tracing / autotuning)
+    it = iter(dataset)
+    for _ in range(warmup_batches):
+        try:
+            batch = next(it)
+        except StopIteration:
+            break
+        x = batch[0] if isinstance(batch, (tuple, list)) else batch
+        _ = model(x, training=False)
+
+    # Timed inference
+    latencies_ms = []
+    cpu_samples = []
+
+    # If you want “per-sample” latency, estimate batch size from first batch.
+    batch_sizes = []
+
+    for _ in range(num_batches):
+        try:
+            batch = next(it)
+        except StopIteration:
+            break
+
+        x = batch[0] if isinstance(batch, (tuple, list)) else batch
+        # batch size: works for dense tensors; for ragged, you may need tweaks
+        try:
+            bs = int(tf.shape(x)[0].numpy())
+            batch_sizes.append(bs)
+        except Exception:
+            pass
+
+        t0 = time.perf_counter()
+        _ = model(x, training=False)
+        t1 = time.perf_counter()
+
+        latencies_ms.append((t1 - t0) * 1000.0)
+
+        if proc:
+            cpu_samples.append(proc.cpu_percent(interval=None))
+            rss = proc.memory_info().rss
+            ram_rss_peak = rss if (ram_rss_peak is None or rss > ram_rss_peak) else ram_rss_peak
+
+    # Aggregate
+    out = {}
+    if latencies_ms:
+        out["infer/latency_ms_mean_per_batch"] = float(np.mean(latencies_ms))
+        out["infer/latency_ms_p50_per_batch"] = float(np.percentile(latencies_ms, 50))
+        out["infer/latency_ms_p90_per_batch"] = float(np.percentile(latencies_ms, 90))
+        out["infer/latency_ms_p95_per_batch"] = float(np.percentile(latencies_ms, 95))
+
+    if batch_sizes and latencies_ms:
+        mean_bs = float(np.mean(batch_sizes))
+        out["infer/batch_size_mean"] = mean_bs
+        out["infer/latency_ms_mean_per_sample_est"] = float(np.mean(latencies_ms) / max(mean_bs, 1.0))
+
+    if proc and cpu_samples:
+        out["cpu/process_cpu_percent_mean"] = float(np.mean(cpu_samples))
+        out["cpu/process_cpu_percent_p95"] = float(np.percentile(cpu_samples, 95))
+
+    if proc and ram_rss_start is not None and ram_rss_peak is not None:
+        out["ram/rss_start_mb"] = _bytes_to_mb(ram_rss_start)
+        out["ram/rss_peak_mb"] = _bytes_to_mb(ram_rss_peak)
+        out["ram/rss_increase_mb"] = _bytes_to_mb(ram_rss_peak - ram_rss_start)
+
+    # Optional GPU stats
+    out.update(_get_tf_gpu_mem_mb("GPU:0"))
+
+    return out

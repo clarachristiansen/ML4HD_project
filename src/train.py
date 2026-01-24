@@ -64,8 +64,20 @@ def main():
         trainer = InceptionTrainer(build_cnn_inception_2_attention, channels=channels, num_heads=2)
     else:
         raise ValueError(f"Unknown architecture: {args.architecture}")
+    
+    if args.use_wandb:
+        wandb.login(key=os.environ.get("WANDB_API_KEY"))
+        wandb.init(
+            entity=args.wandb_entity,
+            project=args.wandb_project,
+            name=args.wandb_run_name,
+            settings=wandb.Settings(start_method="thread"),
+            config=args.__dict__
+        )
+        run_id = wandb.run.id if args.use_wandb else "local"
 
-    best_prefix = "results/best.ckpt"  
+    best_prefix = f"results/checkpoint_{run_id}.ckpt" 
+    #best_prefix = 'results/checkpoint.model.keras' 
 
     callbacks = [
         tf.keras.callbacks.ModelCheckpoint(
@@ -86,14 +98,6 @@ def main():
     ]
 
     if args.use_wandb:
-        wandb.login(key=os.environ.get("WANDB_API_KEY"))
-        wandb.init(
-            entity=args.wandb_entity,
-            project=args.wandb_project,
-            name=args.wandb_run_name,
-            settings=wandb.Settings(start_method="thread"),
-            config=args.__dict__
-        )
         if trainer.__class__.__name__ == "InceptionTrainer":
             callbacks += [
                 WandbMetricsCallbackInception(num_heads=trainer.num_heads),
@@ -102,16 +106,22 @@ def main():
             callbacks += [
                 WandbMetricsCallback(),
             ]
-
+    print(len(classes), "classes:", classes)
     result = trainer.train(args, train_ds, val_ds, classes, callbacks)
 
     if args.use_wandb:
         idx = best_prefix + ".index"
         dat = best_prefix + ".data-00000-of-00001"
         try:
-            wandb.save(idx)
-            wandb.save(dat)
-            print('INFO: Best weights files saved locally and to wandb (files tab).')
+            wandb.save(idx, policy="now")
+            wandb.save(dat, policy="now")
+            print('INFO: Best weights files uploaded to wandb (files tab).')
+            wandb.run.finish()
+            print('INFO: wandb run finished.')
+
+            os.remove(idx)
+            os.remove(dat)
+            print("INFO: Local checkpoint files deleted.")
         except Exception as e:
             print("WARN: saving best weights files to wandb failed. Error:", repr(e))
         wandb.finish()
