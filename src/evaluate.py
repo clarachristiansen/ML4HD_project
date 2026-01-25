@@ -102,9 +102,9 @@ def main():
         elif args.architecture == 'cnn_tpool2_cbam':
             model = build_cnn_tpool2_cbam(num_classes=len(classes), input_shape=input_shape)
         elif args.architecture == 'cnn_inception_1':
-            model = build_cnn_inception_1(num_classes=len(classes), input_shape=input_shape, num_heads=1)
+            model = build_cnn_inception_1(num_classes=len(classes), input_shape=input_shape)
         elif args.architecture == 'cnn_inception_1_attention':
-            model = build_cnn_inception_1_attention(num_classes=len(classes), input_shape=input_shape, num_heads=1)
+            model = build_cnn_inception_1_attention(num_classes=len(classes), input_shape=input_shape)
         else:
             raise ValueError(f"Unknown architecture: {args.architecture}")
         model.compile(
@@ -116,6 +116,7 @@ def main():
     # Load best weights
     if args.use_wandb and args.weights_path_wandb:
         weights_prefix = load_weights(args)
+        print(weights_prefix)
     else:
         weights_prefix = args.weights_path or "checkpoints/best.ckpt"
     model.load_weights(weights_prefix)
@@ -143,7 +144,9 @@ def main():
         print("Inference resource stats:", resource_stats)
 
     ##############
-
+    out_path = "results/results/demo_model.weights.h5"
+    model.save_weights(out_path)
+    print("Saved:", out_path)
 
 
     # Evaluate scalar metrics (same loss/acc as training)
