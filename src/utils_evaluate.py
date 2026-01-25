@@ -72,7 +72,7 @@ def log_confusion_matrix_image(
         cmap="Blues",
         xticks_rotation=45,
         values_format=".0f",      # integers after scaling
-        colorbar=True,
+        colorbar=False,
     )
 
     # Make numbers smaller
