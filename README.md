@@ -1,5 +1,6 @@
 # ML4HD_project
 Final project in the Machine Learning for Human Data course. 
+Paper: https://drive.google.com/file/d/1y5OiDM27agbVYbLooq9E_fjXW4osIRD0/view?usp=sharing
 
 ## How to run 
 1. Clone the repo
